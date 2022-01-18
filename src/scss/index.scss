@@ -1,0 +1,65 @@
+.wp-block-cumulus-gutenberg-family-links,
+.body .wp-block-cumulus-gutenberg-family-links,
+.editor-styles-wrapper.editor-styles-wrapper .wp-block-cumulus-gutenberg-family-links nav {
+
+	a {
+		text-decoration: underline;
+		&:hover {
+			text-decoration: underline;
+		}
+	}
+
+	&.has-text-align {
+		text-align: var(--text-align);
+	}
+
+	&.has-link-color a {
+		color: var(--link-color);
+	}
+		&.has-link-color-hover a:hover {
+			color: var(--link-color-hover);
+		}
+	&.has-no-underline-links a {
+		text-decoration: none;
+		&:hover {
+			text-decoration: underline;
+		}
+	}
+		&.has-no-underline-links-hover a:hover {
+			text-decoration: none;
+		}
+
+	ul,li,li li {
+		margin: 0;
+		margin-top: 0;
+		margin-right: 0;
+		margin-bottom: 0;
+		margin-left: 0;
+		padding: 0;
+		padding-top: 0;
+		padding-right: 0;
+		padding-bottom: 0;
+		padding-left: 0;
+	}
+	ul.children {
+		font-size: 0.95em;
+		margin-left: var(--child-indent);
+	}
+	&.text-align-right ul.children {
+		margin-left: 0;
+		margin-right: var(--child-indent);
+	}
+
+	&.is-style-bullets ul {
+		padding-left: 1.25em;
+		list-style-type: disc;
+	}
+	&.is-style-numbered ul {
+		padding-left: 1em;
+		list-style-type: decimal;
+	}
+	&.is-style-plain ul {
+		list-style-type: none;
+	}
+
+}

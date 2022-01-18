@@ -1,0 +1,85 @@
+{
+	"name": "cumulus-gutenberg/family-links",
+	"apiVersion": 2,
+	"title": "Family Links",
+	"description": "Insert a page's children or siblings",
+	"keywords": ["family", "child", "children", "sibling"],
+	"icon": {
+		"src": "admin-links",
+		"foreground": "#00588d"
+	},
+	"category": "cmls",
+	"attributes": {
+		"align": {
+			"type": "string"
+		},
+		"parentPostId": {
+			"type": "integer",
+			"default": null
+		},
+		"showChildren": {
+			"type": "boolean",
+			"default": true
+		},
+		"depth": {
+			"type": "integer",
+			"default": 0
+		},
+		"displayType": {
+			"type": "string",
+			"default": "plain"
+		},
+		"childIndent": {
+			"type": "string",
+			"default": "1em"
+		},
+		"underlineLinks": {
+			"type": "boolean",
+			"default": true
+		},
+		"underlineOnHover": {
+			"type": "boolean",
+			"default": true
+		},
+		"linkColor": {
+			"type": "string",
+			"default": null
+		},
+		"linkColorHover": {
+			"type": "string",
+			"default": null
+		},
+		"textAlign": {
+			"type": "string",
+			"default": null
+		},
+		"fontWeight": {
+			"type": "string",
+			"default": null
+		},
+		"fontStyle": {
+			"type": "string",
+			"default": null
+		}
+
+	},
+	"supports": {
+		"align": false,
+		"anchor": true,
+		"className": true,
+		"spacing": {
+			"padding": true,
+			"margin": true
+		},
+		"typography": {
+			"align": true,
+			"fontSize": true,
+			"lineHeight": false,
+			"fontWeight": true,
+			"textTransform": true,
+			"__experimentalFontWeight": true,
+			"__experimentalFontStyle": true,
+			"__experimentalTextTransform": true
+		}
+	}
+}
