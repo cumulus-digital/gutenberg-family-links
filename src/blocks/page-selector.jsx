@@ -107,6 +107,7 @@ export function PageAttributesSelector(props) {
 
 	const isHierarchical = get(postType, ['hierarchical'], false);
 	const parentPageLabel = props.label || "Select a Page or Post";
+	const parentPageHelp = props.help || null;
 	const pageItems = items || [];
 
 	const parentOptions = useMemo(() => {
@@ -184,6 +185,7 @@ export function PageAttributesSelector(props) {
 		<ComboboxControl
 			className="editor-page-attributes__parent"
 			label={parentPageLabel}
+			help={parentPageHelp}
 			value={props.parentPostId}
 			options={parentOptions}
 			onFilterValueChange={debounce(handleKeydown, 300)}

@@ -10,13 +10,16 @@ use WP_Query;
  * GitHub Plugin URI: https://github.com/cumulus-digital/gutenberg-family-links/
  * Primary Branch: main
  * Description: Block for inserting a page's children and/or siblings as links
- * Version: 0.0.1
+ * Version: 0.0.3
  * Author: vena
  * License: UNLICENSED
  */
 
 \defined( 'ABSPATH' ) || exit( 'No direct access allowed.' );
 
+/**
+ * Pseudo-random GUID string generator
+ */
 function GUID() {
 	if ( \function_exists( 'com_create_guid' ) === true ) {
 		return \trim( com_create_guid(), '{}' );
@@ -100,9 +103,60 @@ function attr( $attr, $key, $default = null ) {
 	return $default;
 }
 
+function resolveBoxControl( $val ) {
+	$resolved = [
+		attr( $val, 'top' ) ? attr( $val, 'top' ) : '0',
+		attr( $val, 'right' ) ? attr( $val, 'right' ) : '0',
+		attr( $val, 'bottom' ) ? attr( $val, 'bottom' ) : '0',
+		attr( $val, 'left' ) ? attr( $val, 'left' ) : '0',
+	];
+
+	if ( ( \count( \array_unique( $resolved ) ) === 1 ) ) {
+		return attr( $val, 'top', 'inherit' );
+	}
+
+	return \trim( \implode( ' ', $resolved ) );
+}
+
+function implodeAssoc( $glue, $arr ) {
+	$return = [];
+
+	foreach ( $arr as $key => $val ) {
+		$return[] = "{$key}: {$val};";
+	}
+
+	return \implode( ' ', $return );
+}
+
+class FamilyLinkWalker extends \Walker_Page {
+
+	protected $current_object_id = 0;
+
+	public function __construct() {
+		if ( $this->current_object_id === 0 ) {
+			if ( isset( $_GET['post_id'] ) ) {
+				$this->current_object_id = $_GET['post_id'];
+			} else {
+				$this->current_object_id = \get_the_ID();
+			}
+		}
+	}
+
+	public function start_el( &$output, $data_object, $depth = 0, $args = [], $current_object_id = 0 ) {
+		return parent::start_el( $output, $data_object, $depth, $args, $this->current_object_id );
+	}
+}
+
 function renderCallback( $attr, $content, $block ) {
-	$depth        = isset( $attr['depth'] ) ? $attr['depth'] : 0;
-	$parentPostId = -1;
+	$is_backend   = \defined( 'REST_REQUEST' ) && true === REST_REQUEST && 'edit' === \filter_input( \INPUT_GET, 'context', \FILTER_SANITIZE_STRING );
+	$maxDepth     = attr( $attr, 'maxDepth', 0 );
+	$parentPostId = 0;
+
+	if ( isset( $_GET['post_id'] ) ) {
+		$postId = $_GET['post_id'];
+	} else {
+		$postId = \get_the_ID();
+	}
 
 	if ( \array_key_exists( 'parentPostId', $attr ) && $attr['parentPostId'] > 0 ) {
 		$parent = \get_post( $attr['parentPostId'] );
@@ -113,18 +167,14 @@ function renderCallback( $attr, $content, $block ) {
 		$parentPostId = $parent->ID;
 		$postType     = \get_post_type( $parent );
 	} else {
-		if ( isset( $_GET['post_id'] ) ) {
-			$postId = $_GET['post_id'];
-		} else {
-			$postId = \get_the_ID();
-		}
-
-		$parentPostId = \get_post( $postId )->parent;
+		// Default parent is the current page
+		$parentPostId = $postId;
+		$postType     = \get_post_type( $postId );
 	}
 
 	$exclude = [];
 
-	if ( ! $attr['showChildren'] ) {
+	if ( ! $attr['showCurrentChildren'] ) {
 		$children = new WP_Query( [
 			'post_parent'    => $postId,
 			'post_type'      => $postType,
@@ -136,54 +186,86 @@ function renderCallback( $attr, $content, $block ) {
 
 	$defaults = [
 		'post_type'   => $postType,
-		'depth'       => $depth,
+		'depth'       => $maxDepth,
 		'sort_column' => 'menu_order,post_title',
 		'title_li'    => '',
 		'echo'        => false,
+		'walker'      => new FamilyLinkWalker(),
 	];
 	$args = \array_merge( $defaults, [
 		'child_of' => $parentPostId,
 		'exclude'  => \implode( ',', $exclude ),
 	] );
+
 	$pages = \wp_list_pages( $args );
 
 	if ( ! $pages ) {
 		return 'None found.';
 	}
 
-	$id = 'family-links-' . GUID();
-
 	$classes = \array_filter( [
 		"is-style-{$attr['displayType']}",
 		attr( $attr, 'textAlign' ) ? "has-text-align text-align-{$attr['textAlign']}" : null,
 		attr( $attr, 'linkColor' ) ? 'has-link-color' : null,
 		attr( $attr, 'linkColorHover' ) ? 'has-link-color-hover' : null,
-		isset( $attr['underlineLinks'] ) && ! $attr['underlineLinks'] ? 'has-no-underline-links' : null,
-		isset( $attr['underlineOnHover'] ) && ! $attr['underlineOnHover'] ? 'has-no-underline-links-hover' : null,
+		attr( $attr, 'underlineLinks', false ) ? 'has-underline-links' : 'has-no-underline-links',
+		attr( $attr, 'underlineOnHover', false ) ? 'has-underline-links-hover' : 'has-no-underline-links-hover',
+		attr( $attr, 'displayType' ) === 'custom' ? 'has-custom-bullet' : null,
 	] );
 
-	$styleAttr = \array_filter( [
-		'child-indent'     => attr( $attr, 'childIndent' ),
-		'text-align'       => attr( $attr, 'textAlign' ),
-		'link-color'       => attr( $attr, 'linkColor' ),
-		'link-color-hover' => attr( $attr, 'linkColorHover' ),
+	$marginDefault  = [ 'top' => null, 'right' => null, 'bottom' => null, 'left' => null];
+	$itemMargin     = attr( $attr, 'itemMargin', $marginDefault );
+	$childrenMargin = attr( $attr, 'childrenMargin', $marginDefault );
+	$styleAttr      = \array_filter( [
+		'custom-bullet'          => '"' . attr( $attr, 'customBullet' ) . '"',
+		'bullet-color'           => attr( $attr, 'bulletColor' ),
+		'item-margin-top'        => attr( $itemMargin, 'top' ),
+		'item-margin-right'      => attr( $itemMargin, 'right' ),
+		'item-margin-bottom'     => attr( $itemMargin, 'bottom' ),
+		'item-margin-left'       => attr( $itemMargin, 'left' ),
+		'children-margin-top'    => attr( $childrenMargin, 'top' ),
+		'children-margin-right'  => attr( $childrenMargin, 'right' ),
+		'children-margin-bottom' => attr( $childrenMargin, 'bottom' ),
+		'children-margin-left'   => attr( $childrenMargin, 'left' ),
+		'text-align'             => attr( $attr, 'textAlign' ),
+		'link-color'             => attr( $attr, 'linkColor' ),
+		'link-color-hover'       => attr( $attr, 'linkColorHover' ),
 	] );
 
+	// Only set current page styles if highlightCurrent is enabled
+	if ( attr( $attr, 'highlightCurrent', false ) ) {
+		$classes = \array_merge( $classes, \array_filter( [
+			attr( $attr, 'currentLinkColor' ) ? 'has-current-link-color' : null,
+			attr( $attr, 'currentLinkColorHover' ) ? 'has-current-link-color-hover' : null,
+			attr( $attr, 'currentUnderlineLinks', false ) ? 'has-current-underline-link' : 'has-current-no-underline-link',
+			attr( $attr, 'currentUnderlineOnHover', false ) ? 'has-current-underline-link-hover' : 'has-current-no-underline-link-hover',
+		] ) );
+		$styleAttr = \array_merge( $styleAttr, \array_filter( [
+			'current-link-color'       => attr( $attr, 'currentLinkColor' ),
+			'current-link-color-hover' => attr( $attr, 'currentLinkColorHover' ),
+			'current-font-weight'      => attr( $attr, 'currentFontWeight' ),
+			'current-font-size'        => attr( $attr, 'currentFontSize' ),
+		] ) );
+	}
+
+	$params = [
+		'class' => \implode( ' ', $classes ),
+		'style' => \array_reduce( \array_keys( $styleAttr ), function ( $css, $key ) use ( $styleAttr ) {
+			return "--{$key}: {$styleAttr[$key]};" . $css;
+		} ),
+	];
 	\ob_start(); ?>
-	<?php if ( \defined( 'REST_REQUEST' ) && REST_REQUEST ): ?>
-		<nav id="<?php echo $id; ?>" class="<?php echo \implode( ' ', $classes ); ?>">
-	<?php else: ?>
-		<nav <?php echo \get_block_wrapper_attributes( ['id' => $id, 'class' => \implode( ' ', $classes )] ); ?>>
-	<?php endif; ?>
-		<?php if ( \count( $styleAttr ) ): ?>
-		<style>
-			#<?php echo $id; ?> {
-				<?php foreach ( $styleAttr as $key => $val ): ?>
-					--<?php echo $key; ?>: <?php echo $val; ?>;
-				<?php endforeach; ?>
+	<nav
+		<?php
+		// If in editor
+		if ( $is_backend ) {
+			foreach ( $params as $key => $val ) {
+				echo "{$key}='{$val}' ";
 			}
-		</style>
-		<?php endif; ?>
+		} else {
+			echo \get_block_wrapper_attributes( $params );
+		} ?>
+	>
 		<ul>
 			<?php echo $pages; ?>
 		</ul>

@@ -10,8 +10,9 @@ import {
 } from '@wordpress/icons';
 
 const { registerBlockType } = wp.blocks;
-const ServerSideRender = wp.serverSideRender;
+const { serverSideRender: ServerSideRender } = wp;
 const {
+	Disabled,
 	Panel,
 	PanelBody,
 	PanelRow,
@@ -32,6 +33,8 @@ const {
 	TextControl,
 	Dropdown,
 	Icon,
+	Spinner,
+	__experimentalBoxControl: BoxControl
 } = wp.components;
 const {
 	useBlockProps,
@@ -40,24 +43,34 @@ const {
 	ColorPaletteControl,
 	InspectorControls,
 } = wp.blockEditor;
+const { useEffect } = wp.element;
 const { useSelect } = wp.data;
 
 registerBlockType( metadata.name, {
 	...metadata,
 
 	edit: (props) => {
-		const { attributes, setAttributes } = props;
+		const { attributes, setAttributes, clientId } = props;
 		const blockProps = useBlockProps();
-		const currentPost = wp.data.select('core/editor').getCurrentPost();
-		const currentPostParentId = wp.data.select('core/editor').getEditedPostAttribute('parent');
+		var currentPost = wp.data.select('core/editor').getCurrentPost();
+		var currentPostParentId = wp.data.select('core/editor').getEditedPostAttribute('parent');
 
-		if (attributes.parentPostId === null) {
-			if (attributes.showSiblings) {
-				attributes.parentPostId = currentPostParentId;
-			} else {
-				attributes.parentPostId = currentPost.id;
+		function initParentPostId() {
+			if ( ! attributes.parentPostId) {
+				currentPost = wp.data.select('core/editor').getCurrentPost();
+				currentPostParentId = wp.data.select('core/editor').getEditedPostAttribute('parent');
+				if (attributes.showSiblings && attributes.parentPostId !== currentPostParentId) {
+					setAttributes({ 'parentPostId': parseInt(currentPostParentId) });
+					//attributes.parentPostId = currentPostParentId;
+				} else if (currentPost.id) {
+					setAttributes({ 'parentPostId': parseInt(currentPost.id) });
+					//attributes.parentPostId = currentPost.id;
+				} else {
+					setAttributes({ 'parentPostId': 0 });
+				}
 			}
 		}
+		useEffect(initParentPostId);
 
 		const updateTypography = (key, val) => {
 			let newTypo = {};
@@ -79,31 +92,44 @@ registerBlockType( metadata.name, {
 			setAttributes(newAttr);
 		}
 
+		const MySpinner = () => {
+			return (
+				<>
+					<Spinner />
+					<small>Loading Family&hellip;</small>
+				</>
+			);
+		}
+
 		return (
 			<div {...blockProps}>
 				<InspectorControls>
 					<Panel>
 						<PanelBody title="Query Control">
 
-							<p>Select the page to draw children from:</p>
-
 							<PageSelector
 								label="Parent Context"
+								help={(
+									<>
+										Select the page to draw children from.<br />
+										<small>(Leave empty to use the current page)</small>
+									</>
+								)}
 								parentPostId={attributes.parentPostId}
 								onChange={(val) => {
 									setAttributes({ parentPostId: val });
 								}}
 							/>
 
-							{attributes.parentPostId && (
-								<>
-									<p>If the current page is in the parent context's hierarchy:</p>
+							{attributes.parentPostId && attributes.parentPostId !== currentPost.id && (
+								<div>
+									<p>If the <strong>current page</strong> is in the parent context's hierarchy:</p>
 									<ToggleControl
 										label="Include This Page's Children"
-										checked={attributes.showChildren}
-										onChange={(val) => setAttributes({ showChildren: val })}
+										checked={attributes.showCurrentChildren}
+										onChange={(val) => setAttributes({ showCurrentChildren: val })}
 									/>
-								</>
+								</div>
 							)}
 
 							<PanelRow>
@@ -143,8 +169,8 @@ registerBlockType( metadata.name, {
 											label: '6',
 										},
 									]}
-									value={attributes.depth}
-									onChange={(val) => setAttributes({ depth: val })}
+									value={attributes.maxDepth}
+									onChange={(val) => setAttributes({ maxDepth: val })}
 									min={0}
 									max={6}
 								/>
@@ -153,27 +179,57 @@ registerBlockType( metadata.name, {
 						</PanelBody>
 
 						<PanelBody title="Display Style">
-							<Flex align="top">
-								<FlexItem style={{ width: '50%' }}>
-									<SelectControl
-										label="Display Type"
-										value={attributes.displayType}
-										onChange={(val) => setAttributes({ displayType: val })}
-										options={[
-											{ value: 'plain', label: 'Plain' },
-											{ value: 'bullets', label: 'Bulleted' },
-											{ value: 'numbered', label: 'Numbered' },
-										]}
+							<PanelRow>
+								<SelectControl
+									label="Display Type"
+									labelPosition="side"
+									value={attributes.displayType}
+									onChange={(val) => setAttributes({ displayType: val })}
+									options={metadata.attributes.displayType.enum.map((opt) => {
+										return { value: opt, label: opt.charAt(0).toUpperCase() + opt.slice(1) };
+									})}
+								/>
+							</PanelRow>
+
+							{attributes.displayType === 'custom' && (
+								<PanelRow>
+									<TextControl
+										label="Custom Bullet"
+										labelPosition="side"
+										value={attributes.customBullet}
+										onChange={(val) => setAttributes({ customBullet: val.substring(0, 1) })}
 									/>
-								</FlexItem>
-								<FlexItem style={{ width: '50%' }}>
-									<UnitControl
-										label="Child Indentation"
-										onChange={(val) => setAttributes({ childIndent: val })}
-										isUnitSelectTabbable
-										value={attributes.childIndent} />
-								</FlexItem>
-							</Flex>
+								</PanelRow>
+							)}
+							{attributes.displayType !== 'plain' && (
+								<ColorPaletteControl
+									label="Bullet Color"
+									value={attributes.bulletColor}
+									onChange={(val) => setAttributes({ bulletColor: val })}
+								/>
+							)}
+
+							<BoxControl
+								label="Item Margin"
+								values={{
+									top: attributes.itemMargin?.top,
+									right: attributes.itemMargin?.right,
+									bottom: attributes.itemMargin?.bottom,
+									left: attributes.itemMargin?.left,
+								}}
+								onChange={(val) => setAttributes({ itemMargin: val })}
+							/>
+
+							<BoxControl
+								label="Children Container Margin"
+								values={{
+									top: attributes.childrenMargin?.top,
+									right: attributes.childrenMargin?.right,
+									bottom: attributes.childrenMargin?.bottom,
+									left: attributes.childrenMargin?.left,
+								}}
+								onChange={(val) => setAttributes({ childrenMargin: val })}
+							/>
 
 							<ColorPaletteControl
 								label="Link Color"
@@ -201,7 +257,75 @@ registerBlockType( metadata.name, {
 								/>
 							</PanelRow>
 
+							<PanelRow>
+								<ToggleControl
+									label="Highlight Current Page"
+									checked={attributes.highlightCurrent}
+									onChange={(val) => {
+										setAttributes({ highlightCurrent: val });
+									}}
+								/>
+							</PanelRow>
+
 						</PanelBody>
+
+						{attributes.highlightCurrent && (
+
+							<PanelBody title="Current Page Highlight">
+
+								<PanelRow>
+									<UnitControl
+										labelPosition="side"
+										size="small"
+										label="Font Size"
+										onChange={(val) => setAttributes({ currentFontSize: val })}
+										isUnitSelectTabbable
+										unit="em"
+										value={attributes.currentFontSize} />
+								</PanelRow>
+
+								<PanelRow>
+									<SelectControl
+										label="Font Weight"
+										labelPosition="side"
+										value={attributes.currentFontWeight}
+										onChange={(val) => setAttributes({ currentFontWeight: val })}
+										options={[
+											{ value: null, label: 'Inherit' },
+											{ value: 'normal', label: 'Normal' },
+											{ value: 'bold', label: "Bold" }
+										]}
+									/>
+								</PanelRow>
+
+								<ColorPaletteControl
+									label="Link Color"
+									value={attributes.currentLinkColor}
+									onChange={(val) => setAttributes({ currentLinkColor: val })}
+								/>
+								<PanelRow>
+									<ToggleControl
+										label="Underline Link"
+										checked={attributes.currentUnderlineLinks}
+										onChange={(val) => setAttributes({ currentUnderlineLinks: val })}
+									/>
+								</PanelRow>
+
+								<ColorPaletteControl
+									label="Hover Color"
+									value={attributes.currentLinkColorHover}
+									onChange={(val) => setAttributes({ currentLinkColorHover: val })}
+								/>
+								<PanelRow>
+									<ToggleControl
+										label="Underline Link on Hover"
+										checked={attributes.currentUnderlineOnHover}
+										onChange={(val) => setAttributes({ currentUnderlineOnHover: val })}
+									/>
+								</PanelRow>
+
+							</PanelBody>
+						)}
 
 					</Panel>
 				</InspectorControls>
@@ -277,11 +401,14 @@ registerBlockType( metadata.name, {
 					</ToolbarGroup>
 				</BlockControls>
 
-				<ServerSideRender
-					block={metadata.name}
-					attributes={attributes}
-					urlQueryArgs={{ post_id: currentPost.id }}
-				/>
+				<Disabled>
+					<ServerSideRender
+						block={metadata.name}
+						attributes={attributes}
+						urlQueryArgs={{ post_id: currentPost.id }}
+						LoadingResponsePlaceholder={MySpinner}
+					/>
+				</Disabled>
 			</div>
 		);
 	},
