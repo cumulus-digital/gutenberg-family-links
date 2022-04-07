@@ -25,6 +25,14 @@
 			"type": "integer",
 			"default": 0
 		},
+		"excludeNoindex": {
+			"type": "boolean",
+			"default": true
+		},
+		"excludeAdditionalIDs": {
+			"type": "string",
+			"default": ""
+		},
 		"displayType": {
 			"type": "string",
 			"enum": [

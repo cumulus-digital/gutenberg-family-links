@@ -176,6 +176,23 @@ registerBlockType( metadata.name, {
 								/>
 							</PanelRow>
 
+							<PanelRow>
+								<ToggleControl
+									label="Exclude pages marked 'noindex' in popular SEO plugins."
+									checked={attributes.excludeNoindex}
+									onChange={(val) => setAttributes({ excludeNoindex: val })}
+								/>
+							</PanelRow>
+
+							<PanelRow>
+								<TextControl
+									label="Exclude additional page IDs"
+									help="Enter IDs, separated by a space or comma"
+									value={attributes.excludeAdditionalIDs}
+									onChange={(val) => setAttributes({ excludeAdditionalIDs: val})}
+								/>
+							</PanelRow>
+
 						</PanelBody>
 
 						<PanelBody title="Display Style">
@@ -195,12 +212,12 @@ registerBlockType( metadata.name, {
 								<PanelRow>
 									<TextControl
 										label="Custom Bullet"
-										labelPosition="side"
 										value={attributes.customBullet}
 										onChange={(val) => setAttributes({ customBullet: val.substring(0, 1) })}
 									/>
 								</PanelRow>
 							)}
+
 							{attributes.displayType !== 'plain' && (
 								<ColorPaletteControl
 									label="Bullet Color"
