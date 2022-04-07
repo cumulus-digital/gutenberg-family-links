@@ -26,6 +26,7 @@
 			"default": 0
 		},
 		"displayType": {
+			"type": "string",
 			"enum": [
 				"plain",
 				"bullets",
