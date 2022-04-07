@@ -10,7 +10,7 @@ use WP_Query;
  * GitHub Plugin URI: https://github.com/cumulus-digital/gutenberg-family-links/
  * Primary Branch: main
  * Description: Block for inserting a page's children and/or siblings as links
- * Version: 0.0.3
+ * Version: 0.0.4
  * Author: vena
  * License: UNLICENSED
  */
@@ -184,6 +184,20 @@ function renderCallback( $attr, $content, $block ) {
 		$exclude = \array_merge( $exclude, $children->posts );
 	}
 
+	// Get list of page IDs where noindex is set in popular plugins
+	if ( \function_exists( 'aioseo' ) ) {
+		$query = \aioseo()->core->db
+			->start( \aioseo()->core->db->db->posts . ' as p', true )
+			->select( 'p.ID' )
+			->leftJoin( 'aioseo_posts as ap', '`ap`.`post_id` = `p`.`ID`' )
+			->where( 'p.post_status', 'publish' )
+			->whereRaw( '`ap`.`robots_noindex` = 1' );
+
+		$posts = $query->run( true, 'col' )
+			->result();
+		$exclude = \array_merge( $exclude, $posts );
+	}
+
 	$defaults = [
 		'post_type'   => $postType,
 		'depth'       => $maxDepth,
@@ -193,8 +207,19 @@ function renderCallback( $attr, $content, $block ) {
 		'walker'      => new FamilyLinkWalker(),
 	];
 	$args = \array_merge( $defaults, [
-		'child_of' => $parentPostId,
-		'exclude'  => \implode( ',', $exclude ),
+		'child_of'   => $parentPostId,
+		'exclude'    => \implode( ',', $exclude ),
+		'meta_query' => [
+			[
+				'key'     => '_yoast_wpseo_meta-robots-noindex',
+				'value'   => 1,
+				'compare' => 'NOT EXISTS',
+			],
+			[
+				'key'     => '_hide_from_sitemap',
+				'compare' => 'NOT EXISTS',
+			],
+		],
 	] );
 
 	$pages = \wp_list_pages( $args );
