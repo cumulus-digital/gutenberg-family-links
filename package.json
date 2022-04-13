@@ -36,8 +36,8 @@
   },
   "homepage": "https://github.com/cumulus-digital/gutenberg-family-links/#readme",
   "devDependencies": {
-    "@wordpress/icons": "^8.1.0",
-    "@wordpress/scripts": "^22.3.0"
+    "@wordpress/icons": "^8.2.0",
+    "@wordpress/scripts": "^22.4.0"
   },
   "browserslist": [
     "last 3 versions or > 1%"

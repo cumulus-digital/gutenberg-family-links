@@ -14,8 +14,7 @@
 			"type": "string"
 		},
 		"parentPostId": {
-			"type": "integer",
-			"default": 0
+			"type": "integer"
 		},
 		"showCurrentChildren": {
 			"type": "boolean",
@@ -30,8 +29,8 @@
 			"default": true
 		},
 		"excludeAdditionalIDs": {
-			"type": "string",
-			"default": ""
+			"type": "array",
+			"default": []
 		},
 		"displayType": {
 			"type": "string",
@@ -46,7 +45,7 @@
 		},
 		"customBullet": {
 			"type": "string",
-			"default": null
+			"default": ""
 		},
 		"itemMargin": {
 			"type": "object",
@@ -108,7 +107,11 @@
 		},
 		"currentFontWeight": {
 			"type": "string",
-			"default": "bold"
+			"default": "700"
+		},
+		"currentFontStyle": {
+			"type": "string",
+			"default": "normal"
 		},
 		"currentUnderlineLinks": {
 			"type": "boolean",
@@ -142,10 +145,35 @@
 			"fontSize": true,
 			"lineHeight": false,
 			"fontWeight": true,
+			"fontStyle": true,
 			"textTransform": true,
 			"__experimentalFontWeight": true,
 			"__experimentalFontStyle": true,
 			"__experimentalTextTransform": true
+		},
+		"border": {
+			"color": true,
+			"radius": true,
+			"style": true,
+			"width": true,
+			"defaultControls": {
+				"color": true,
+				"radius": true,
+				"style": true,
+				"width": true
+			}
+		},
+		"__experimentalBorder": {
+			"color": true,
+			"radius": true,
+			"style": true,
+			"width": true,
+			"__experimentalDefaultControls": {
+				"color": true,
+				"radius": true,
+				"style": true,
+				"width": true
+			}
 		}
 	}
 }

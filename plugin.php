@@ -2,15 +2,13 @@
 
 namespace CUMULUS\Gutenberg\FamilyLinks;
 
-use WP_Query;
-
 /*
  * Plugin Name: Gutenberg Family Links Block
  * Plugin URI: https://github.com/cumulus-digital/gutenberg-family-links/
  * GitHub Plugin URI: https://github.com/cumulus-digital/gutenberg-family-links/
  * Primary Branch: main
  * Description: Block for inserting a page's children and/or siblings as links
- * Version: 0.0.5
+ * Version: 0.0.6
  * Author: vena
  * License: UNLICENSED
  */
@@ -132,7 +130,11 @@ class FamilyLinkWalker extends \Walker_Page {
 
 	protected $current_object_id = 0;
 
+	protected $is_backend = false;
+
 	public function __construct() {
+		$this->is_backend = \defined( 'REST_REQUEST' ) && true === REST_REQUEST && 'edit' === \filter_input( \INPUT_GET, 'context', \FILTER_SANITIZE_STRING );
+
 		if ( $this->current_object_id === 0 ) {
 			if ( isset( $_GET['post_id'] ) ) {
 				$this->current_object_id = $_GET['post_id'];
@@ -143,7 +145,15 @@ class FamilyLinkWalker extends \Walker_Page {
 	}
 
 	public function start_el( &$output, $data_object, $depth = 0, $args = [], $current_object_id = 0 ) {
-		return parent::start_el( $output, $data_object, $depth, $args, $this->current_object_id );
+		$newOutput = '';
+
+		parent::start_el( $newOutput, $data_object, $depth, $args, $this->current_object_id );
+
+		if ( $this->is_backend ) {
+			$newOutput = \str_replace( '<a ', '<a onclick="event.preventDefault();" ', $newOutput );
+		}
+
+		$output .= $newOutput;
 	}
 }
 
@@ -158,14 +168,19 @@ function renderCallback( $attr, $content, $block ) {
 		$postId = \get_the_ID();
 	}
 
-	if ( \array_key_exists( 'parentPostId', $attr ) && $attr['parentPostId'] > 0 ) {
-		$parent = \get_post( $attr['parentPostId'] );
+	if ( \array_key_exists( 'parentPostId', $attr ) ) {
+		if ( $attr['parentPostId'] > 0 ) {
+			$parent = \get_post( $attr['parentPostId'] );
 
-		if ( ! $parent ) {
-			return $attr['parentPostId'] . ' No such post exists.';
+			if ( ! $parent ) {
+				return $attr['parentPostId'] . ' No such post exists.';
+			}
+			$parentPostId = $parent->ID;
+			$postType     = \get_post_type( $parent );
+		} else {
+			$parentPostId = 0;
+			$postType     = \get_post_type( $postId );
 		}
-		$parentPostId = $parent->ID;
-		$postType     = \get_post_type( $parent );
 	} else {
 		// Default parent is the current page
 		$parentPostId = $postId;
@@ -175,7 +190,7 @@ function renderCallback( $attr, $content, $block ) {
 	$exclude = [];
 
 	if ( ! $attr['showCurrentChildren'] ) {
-		$children = new WP_Query( [
+		$children = new \WP_Query( [
 			'post_parent'    => $postId,
 			'post_type'      => $postType,
 			'fields'         => 'ids',
@@ -199,7 +214,7 @@ function renderCallback( $attr, $content, $block ) {
 
 	if ( $attr['excludeNoindex'] ) {
 
-		// Get list of page IDs where noindex is set in popular plugins
+		// Get list of page IDs where noindex is set in aioseo
 		if ( \function_exists( 'aioseo' ) ) {
 			$aioseo_query = \aioseo()->core->db
 				->start( \aioseo()->core->db->db->posts . ' as p', true )
@@ -237,15 +252,21 @@ function renderCallback( $attr, $content, $block ) {
 		] );
 	}
 
-	$excludeAdditionalIDs = \preg_split( '/[,\s]/', $attr['excludeAdditionalIDs'] );
-
-	if ( \count( $excludeAdditionalIDs ) ) {
-		if ( ! \array_key_exists( 'exclude', $args ) ) {
-			$args['exclude'] = '';
+	if ( \array_key_exists( 'excludeAdditionalIDs', $attr ) ) {
+		if ( ! \is_array( $attr['excludeAdditionalIDs'] ) ) {
+			$excludeAdditionalIDs = \explode( ',', $attr['excludeAdditionalIDs'] );
 		} else {
-			$args['exclude'] .= ',';
+			$excludeAdditionalIDs = $attr['excludeAdditionalIDs'];
 		}
-		$args['exclude'] .= \implode( ',', $excludeAdditionalIDs );
+
+		if ( \count( $excludeAdditionalIDs ) ) {
+			if ( ! \array_key_exists( 'exclude', $args ) ) {
+				$args['exclude'] = '';
+			} else {
+				$args['exclude'] .= ',';
+			}
+			$args['exclude'] .= \implode( ',', $excludeAdditionalIDs );
+		}
 	}
 
 	$pages = \wp_list_pages( $args );
@@ -295,6 +316,7 @@ function renderCallback( $attr, $content, $block ) {
 			'current-link-color'       => attr( $attr, 'currentLinkColor' ),
 			'current-link-color-hover' => attr( $attr, 'currentLinkColorHover' ),
 			'current-font-weight'      => attr( $attr, 'currentFontWeight' ),
+			'current-font-style'       => attr( $attr, 'currentFontStyle' ),
 			'current-font-size'        => attr( $attr, 'currentFontSize' ),
 		] ) );
 	}
@@ -325,3 +347,47 @@ function renderCallback( $attr, $content, $block ) {
 
 	return \ob_get_clean();
 }
+
+function list_children( \WP_REST_Request $request ) {
+	if ( ! $request->has_param( 'type' ) ) {
+		$request->set_param( 'type', 'page' );
+	}
+
+	if ( ! $request->has_param( 'child_of' ) ) {
+		$request->set_param( 'child_of', 0 );
+	}
+
+	$children = \get_pages( [
+		'type'        => $request->get_param( 'type' ),
+		'child_of'    => $request->get_param( 'child_of' ),
+		'sort_column' => 'menu_order',
+		'sort_order'  => 'asc',
+	] );
+
+	if ( empty( $children ) ) {
+		return new \WP_REST_Response( [], 200 );
+	}
+
+	$response = new \WP_REST_Posts_Controller( $request->get_param( 'type' ) );
+	$return   = [];
+
+	foreach ( $children as &$child ) {
+		$return[] = $response->prepare_item_for_response( $child, $request )->data;
+	}
+
+	//$response = new \WP_REST_Posts_Controller( $request->get_param( 'type' ) );
+
+	//return $return;
+
+	return new \WP_REST_Response( $return, 200 );
+}
+\add_action( 'rest_api_init', function () {
+	$namespace = 'cumulus-family-links/v1';
+	\register_rest_route( $namespace, '/children-of/(?P<child_of>\d+)', [
+		'methods'             => 'GET',
+		'callback'            => __NAMESPACE__ . '\\list_children',
+		'permission_callback' => function () {
+			return \current_user_can( 'read' );
+		},
+	] );
+} );

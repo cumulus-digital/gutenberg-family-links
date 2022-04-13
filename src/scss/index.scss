@@ -84,6 +84,7 @@
 	li.current_page_item > a {
 		font-weight: var(--current-font-weight, inherit);
 		font-size: var(--current-font-size, inherit);
+		font-style: var(--current-font-style, inherit);
 	}
 	&.has-current-link-color li.current_page_item > a {
 		color: var(--current-link-color);

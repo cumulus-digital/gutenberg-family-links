@@ -2,20 +2,36 @@
  * Page selector component, semi-replicates WP's own parent page selector
  */
 import {
-	get,
-	unescape as unescapeString,
-	debounce,
-	repeat,
+	//get,
+	//unescape as unescapeString,
+//	debounce,
+	//repeat,
 	find,
 	flatten,
 	deburr,
 	groupBy,
+	isEqual,
 } from 'lodash';
-const { ComboboxControl } = wp.components;
-const { useState, useMemo } = wp.element;
-const { useSelect, useDispatch } = wp.data;
+const {
+//	ComboboxControl,
+//	FormTokenField,
+	TreeSelect,
+	Disabled,
+	Spinner,
+	Flex
+} = wp.components;
+const {
+	useState,
+//	useMemo,
+	useEffect,
+	useCallback
+} = wp.element;
+const { usePrevious } = wp.compose;
+//const { useSelect, useDispatch } = wp.data;
 const { decodeEntities } = wp.htmlEntities;
-const { store: coreStore } = wp.coreData;
+//const { store: coreStore } = wp.coreData;
+const { addQueryArgs } = wp.url;
+const { __ } = wp.i18n;
 
 // https://github.com/WordPress/gutenberg/blob/ecfeb256bf5f43d6c70d6ae45ffb5cad7daee34f/packages/editor/src/utils/terms.js#L13
 function buildTermsTree(flatTerms) {
@@ -43,8 +59,13 @@ function buildTermsTree(flatTerms) {
 			};
 		});
 	};
-
-	return fillWithChildren(termsByParent['0'] || []);
+	if (termsByParent['0']) {
+		return fillWithChildren(termsByParent['0']);
+	}
+	if (Object.values(termsByParent).length) {
+		return fillWithChildren(Object.values(termsByParent)[0]);
+	}
+	return [];
 }
 
 
@@ -68,99 +89,199 @@ export const getItemPriority = (name, searchValue) => {
 	return Infinity;
 };
 
-export function PageAttributesSelector(props) {
-	const [fieldValue, setFieldValue] = useState(false);
-	const { parentPost, parentPostId, items, postType } = useSelect(
-		(select) => {
-			const { getPostType, getEntityRecords, getEntityRecord } = select(
-				coreStore
-			);
-			const postTypeSlug = wp.data.select('core/editor').getCurrentPostType();
-			const pageId = props.parentPostId;// || wp.data.select('core/editor').getCurrentPostAttribute('parent');
-			const pType = getPostType(postTypeSlug);
-			const isHierarchical = get(pType, ['hierarchical'], false);
-			const query = {
-				per_page: 100,
-				orderby: 'menu_order',
-				order: 'asc',
-				_fields: 'id,title,parent',
-			};
+function buildPageList(props, searchValue = false, beginTreeFrom = null) {
 
-			// Perform a search when the field is changed.
-			if (!!fieldValue) {
-				query.search = fieldValue;
+	const currentPostType = wp.data.select('core/editor').getCurrentPostType();
+	const pageId = props?.parentPostId ? props.parentPostId : wp.data.select('core/editor').getCurrentPostId();
+	let parentPost = pageId;
+	let postType = null;
+	let isHierarchical = false;
+	let items = [];
+	let options = [];
+
+	return new Promise((resolve, reject) => {
+		// get details about current post type
+		wp.apiFetch({
+			path: addQueryArgs(`/wp/v2/types/${currentPostType}`, { context: 'view' })
+		}).then(type => {
+
+			postType = type;
+			isHierarchical = type.hierarchical;
+
+			if (!isHierarchical) {
+				setOptions([]);
+				resolve(options);
+				return;
 			}
 
-			return {
-				parentPostId: pageId,
-				parentPost: pageId
-					? getEntityRecord('postType', postTypeSlug, pageId)
-					: null,
-				items: isHierarchical
-					? getEntityRecords('postType', postTypeSlug, query)
-					: [],
-				postType: pType,
+			const query = {
+				type: postType.slug,
+				per_page: -1,
+				orderby: 'menu_order',
+				order: 'asc',
+				context: 'view'
 			};
-		},
-		[fieldValue]
-	);
+			if (!!searchValue) {
+				query.search = searchValue;
+			}
+			let path = beginTreeFrom ?
+				`/cumulus-family-links/v1/children-of/${pageId}` :
+				`/${postType.rest_namespace}/${postType.rest_base}`;
 
-	const isHierarchical = get(postType, ['hierarchical'], false);
-	const parentPageLabel = props.label || "Select a Page or Post";
+			// get child pages
+			wp.apiFetch({
+				path: addQueryArgs(path, query)
+			}).then((pages) => {
+				if (pages && pages.length) {
+					items = pages;
+
+					// Build options!
+					/*
+					const getOptionsFromTree = (tree, level = 0) => {
+						const mappedNodes = tree.map((treeNode) => [
+							{
+								value: treeNode.id,
+								label:
+									repeat('• ', level) + unescapeString(treeNode.name),
+								rawName: treeNode.name,
+							},
+							...getOptionsFromTree(treeNode.children || [], level + 1),
+						]);
+
+						const sortedNodes = mappedNodes.sort(([a], [b]) => {
+							const priorityA = getItemPriority(a.rawName, searchValue);
+							const priorityB = getItemPriority(b.rawName, searchValue);
+							return priorityA >= priorityB ? 1 : -1;
+						});
+						return flatten(sortedNodes);
+					};
+					*/
+
+					let tree = items.map((item) => ({
+						id: item.id,
+						parent: item.parent,
+						name: getTitle(item),
+					}));
+
+					// Only build a hierarchical tree when not searching.
+					//if (!searchValue) {
+						tree = buildTermsTree(tree);
+					//}
+					resolve(tree);
+					return;
+
+					const opts = getOptionsFromTree(tree);
+
+					// Ensure the current parent is in the options list.
+					if (!beginTreeFrom) {
+						const optsHasParent = find(
+							opts,
+							(item) => item.value === pageId
+						);
+						if (parentPost && !optsHasParent) {
+							opts.unshift({
+								value: parentPost.id,
+								label: getTitle(parentPost),
+							});
+						}
+					}
+					options = opts;
+					resolve(options);
+				}
+			});
+		});
+	});
+
+}
+
+export function ChildPagesSelector(props) {
+	const [postOptions, setPostOptions] = useState([]);
+	const [selected, setSelected] = useState([]);
+
+	const matchId = (n) => {
+		const f = n.match(/\[id:(?<id>\d+)\]/);
+		if (f?.groups?.id) {
+			return parseInt(f.groups.id);
+		}
+	};
+
+	useEffect(() => {
+		const fetchOptions = new buildPageList(props, false, props.parentPostId || 0);
+		fetchOptions.then(options => {
+			setPostOptions(options);
+			const flattenIds = (items) => {
+				const ret = items.map(item => {
+					return [
+						item.id,
+						...flattenIds(item.children || [])
+					]
+				});
+				return flatten(ret);
+			}
+			const postIds = flattenIds(options);
+			const tokenIds = selected;
+			const newTokens = postIds.filter(i => tokenIds.includes(i));
+			handleChange(newTokens);
+		});
+	}, [props.parentPostId]);
+
+	const handleChange = tokens => {
+		setSelected(tokens);
+		if (props.onChange) {
+			props.onChange(tokens);
+		}
+	};
+
+	return (
+		<TreeSelect
+			multiple={true}
+			label={props.label}
+			help={props.help}
+			tree={postOptions}
+			selectedId={selected}
+			disabled={postOptions.length ? false : true}
+			onChange={handleChange}
+			style={{ height: 'auto', maxHeight: '6em', padding: '8px', lineHeight: 1.2 }}
+		/>
+	)
+
+}
+
+export function PageSelector(props) {
+	const [fieldValue, setFieldValue] = useState(false);
+	const [selected, setSelected] = useState(props.parentPostId);
+	const [prevSelected, setPrevSelected] = useState(null);
+	const prevProps = usePrevious(props);
+	const [options, setOptions] = useState([]);
+	const [isLoading, setIsLoading] = useState("Loading...");
+	const parentPageLabel = props.label || "Select a Page";
 	const parentPageHelp = props.help || null;
-	const pageItems = items || [];
+	const noOptionLabel = props.noOptionLabel || 'No page selected';
 
-	const parentOptions = useMemo(() => {
-		const getOptionsFromTree = (tree, level = 0) => {
-			const mappedNodes = tree.map((treeNode) => [
-				{
-					value: treeNode.id,
-					label:
-						repeat('— ', level) + unescapeString(treeNode.name),
-					rawName: treeNode.name,
-				},
-				...getOptionsFromTree(treeNode.children || [], level + 1),
-			]);
-
-			const sortedNodes = mappedNodes.sort(([a], [b]) => {
-				const priorityA = getItemPriority(a.rawName, fieldValue);
-				const priorityB = getItemPriority(b.rawName, fieldValue);
-				return priorityA >= priorityB ? 1 : -1;
-			});
-
-			return flatten(sortedNodes);
-		};
-
-		let tree = pageItems.map((item) => ({
-			id: item.id,
-			parent: item.parent,
-			name: getTitle(item),
-		}));
-
-		// Only build a hierarchical tree when not searching.
-		if (!fieldValue) {
-			tree = buildTermsTree(tree);
+	const loadPages = useCallback(() => {
+		if (!prevSelected) {
+			setPrevSelected(selected);
 		}
-
-		const opts = getOptionsFromTree(tree);
-
-		// Ensure the current parent is in the options list.
-		const optsHasParent = find(
-			opts,
-			(item) => item.value === props.parentPostId
-		);
-		if (parentPost && !optsHasParent) {
-			opts.unshift({
-				value: props.parentPostId,
-				label: getTitle(parentPost),
+		if (! isEqual(prevProps, props)) {
+			setIsLoading(true);
+			const fetchOptions = new buildPageList({ parentPostId: selected }, fieldValue);
+			fetchOptions.then(options => {
+				setIsLoading(false);
+				setOptions([
+					{
+						'id': 0,
+						'name': 'All pages'
+					},
+					...options
+				]);
+				if (props.parentPostId) {
+					setSelected(props.parentPostId);
+				}
 			});
 		}
-		return opts;
-	}, [pageItems, fieldValue]);
+	});
+	useEffect(loadPages, [props.parentPostId]);
 
-	if (!isHierarchical || !parentPageLabel) {
-		return null;
-	}
 	/**
 	 * Handle user input.
 	 *
@@ -176,22 +297,44 @@ export function PageAttributesSelector(props) {
 	 * @param {Object} selectedPostId The selected Author.
 	 */
 	const handleChange = (selectedPostId) => {
+		setSelected(selectedPostId);
+		setFieldValue(false);
 		if (props.onChange) {
 			props.onChange(selectedPostId);
 		}
 	};
 
-	return (
-		<ComboboxControl
+	useEffect(() => {
+		if (props.onLoading) {
+			props.onLoading(isLoading);
+		}
+	}, [isLoading]);
+
+	const control = (
+		<TreeSelect
 			className="editor-page-attributes__parent"
 			label={parentPageLabel}
 			help={parentPageHelp}
-			value={props.parentPostId}
-			options={parentOptions}
-			onFilterValueChange={debounce(handleKeydown, 300)}
+			noOptionLabel={isLoading ? 'Loading...' : noOptionLabel}
+			selectedId={selected}
+			tree={options}
 			onChange={handleChange}
+			style={{ lineHeight: 1.2 }}
 		/>
 	);
+
+	if (isLoading) {
+		return (
+			<Disabled>
+				<Flex align="top">
+					{control}
+					<Spinner />
+				</Flex>
+			</Disabled>
+		);
+	}
+
+	return control;
 }
 
-export default PageAttributesSelector;
+export default PageSelector;
