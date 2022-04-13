@@ -8,7 +8,7 @@ namespace CUMULUS\Gutenberg\FamilyLinks;
  * GitHub Plugin URI: https://github.com/cumulus-digital/gutenberg-family-links/
  * Primary Branch: main
  * Description: Block for inserting a page's children and/or siblings as links
- * Version: 0.0.9
+ * Version: 0.0.10
  * Author: vena
  * License: UNLICENSED
  */
@@ -66,9 +66,71 @@ function editor_assets() {
 }
 \add_action( 'enqueue_block_editor_assets', __NAMESPACE__ . '\\editor_assets' );
 
+/**
+ * Check if a given post has our block. WP's own has_block() does not work
+ * if the block is inside a reusable block!
+ *
+ * @param string                  $block_name
+ * @param int|string|WP_Post|null $id
+ *
+ * @return bool
+ **/
+function contains_block( $block_name = false, $id = false ) {
+	if ( ! $block_name ) {
+		return false;
+	}
+
+	$id = ( $id === false ) ? \get_the_ID() : $id;
+
+	if ( $id !== false ) {
+		// Handle posts without blocks
+		if ( ! \has_blocks( $id ) ) {
+			return false;
+		}
+
+		// Assume shorthand block names are core blocks
+		if ( false === \mb_strpos( $block_name, '/' ) ) {
+			$block_name = 'core/' . $block_name;
+		}
+
+		// Handle regular blocks quickly
+		if ( \has_block( $block_name, $id ) ) {
+			return true;
+		}
+
+		// Handle reusable blocks
+		if ( \has_block( 'core/block', $id ) ) {
+			// Check post content for reusable blocks
+			$content = \get_post_field( 'post_content', $id );
+			$blocks  = \parse_blocks( $content );
+
+			if ( ! \is_array( $blocks ) || empty( $blocks ) ) {
+				return false;
+			}
+
+			// Recursive search for our block
+			function search_reusable_blocks( $blocks, $block_name ) {
+				foreach ( $blocks as $block ) {
+					if ( isset( $block['innerBlocks'] ) && ! empty( $block['innerBlocks'] ) ) {
+						return search_reusable_blocks( $block['innerBlocks'], $block_name );
+					} elseif ( $block['blockName'] === 'core/block' && ! empty( $block['attrs']['ref'] ) && \has_block( $block_name, $block['attrs']['ref'] ) ) {
+						return true;
+					}
+				}
+
+				return false;
+			}
+
+			return search_reusable_blocks( $blocks, $block_name );
+		}
+	}
+
+	return false;
+}
+
 // Frontend Assets
 function frontend_block_assets() {
-	if ( \has_block( 'cumulus-gutenberg/family-links' ) && ! \is_admin() ) {
+	if ( contains_block( 'cumulus-gutenberg/family-links' ) && ! \is_admin() ) {
 
 		// Block assets
 		\wp_enqueue_style(
