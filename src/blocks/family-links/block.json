@@ -135,6 +135,12 @@
 		"align": false,
 		"anchor": false,
 		"className": true,
+		"color": {
+			"background": true,
+			"gradients": true,
+			"text": false,
+			"link": false
+		},
 		"spacing": {
 			"padding": true,
 			"margin": true,
