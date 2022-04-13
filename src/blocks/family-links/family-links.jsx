@@ -241,7 +241,7 @@ registerBlockType( metadata.name, {
 										onChange={(val) => {
 											const excludes = val.match(/(?<id>\d+)/);
 											if (excludes?.groups?.id && excludes?.groups?.id?.length) {
-												setAttributes({ excludeAdditionalIDs: val });
+												setAttributes({ excludeAdditionalIDs: excludes.groups.id });
 											} else {
 												setAttributes({ excludeAdditionalIDs: [] })
 											}
