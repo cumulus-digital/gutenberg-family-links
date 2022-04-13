@@ -196,43 +196,60 @@ function buildPageList(props, searchValue = false, beginTreeFrom = null) {
 
 export function ChildPagesSelector(props) {
 	const [postOptions, setPostOptions] = useState([]);
-	const [selected, setSelected] = useState([]);
-
-	const matchId = (n) => {
-		const f = n.match(/\[id:(?<id>\d+)\]/);
-		if (f?.groups?.id) {
-			return parseInt(f.groups.id);
-		}
-	};
+	const [selected, setSelected] = useState(props.value);
+	const [prevSelected, setPrevSelected] = useState([]);
+	const prevProps = usePrevious(props);
+	const [isLoading, setIsLoading] = useState("Loading...");
 
 	useEffect(() => {
-		const fetchOptions = new buildPageList(props, false, props.parentPostId || 0);
-		fetchOptions.then(options => {
-			setPostOptions(options);
-			const flattenIds = (items) => {
-				const ret = items.map(item => {
-					return [
-						item.id,
-						...flattenIds(item.children || [])
-					]
+		if (!prevSelected) {
+			setPrevSelected(selected);
+		}
+		if (!isEqual(prevProps, props)) {
+			setIsLoading(true);
+			const fetchOptions = new buildPageList(props, false, props.parentPostId ? props.parentPostId : null);
+			fetchOptions.then(options => {
+				setPostOptions(options);
+				const flattenIds = (items) => {
+					const ret = items.map(item => {
+						return [
+							item.id.toString(),
+							...flattenIds(item.children || [])
+						]
+					});
+					return flatten(ret);
+				}
+				const postIds = flattenIds(options);
+				const tokenIds = selected;
+				const newTokens = postIds.filter(i => tokenIds.includes(i));
+				console.log({
+					postIds: postIds,
+					tokenIds: tokenIds,
+					newTokens: newTokens,
+					props: props
 				});
-				return flatten(ret);
-			}
-			const postIds = flattenIds(options);
-			const tokenIds = selected;
-			const newTokens = postIds.filter(i => tokenIds.includes(i));
-			handleChange(newTokens);
-		});
+				handleChange(newTokens);
+				setIsLoading(false);
+			});
+		}
 	}, [props.parentPostId]);
 
+	useEffect(() => {
+		if (props.onLoading) {
+			props.onLoading(isLoading);
+		}
+	}, [isLoading]);
+
 	const handleChange = tokens => {
+		console.log({ selected: tokens });
+		setPrevSelected(selected);
 		setSelected(tokens);
 		if (props.onChange) {
 			props.onChange(tokens);
 		}
 	};
 
-	return (
+	const control = (
 		<TreeSelect
 			multiple={true}
 			label={props.label}
@@ -243,7 +260,19 @@ export function ChildPagesSelector(props) {
 			onChange={handleChange}
 			style={{ height: 'auto', maxHeight: '6em', padding: '8px', lineHeight: 1.2 }}
 		/>
-	)
+	);
+
+	if (isLoading) {
+		return (
+			<Disabled>
+				<Flex align="center" justify="left" style={{ marginBottom: '10px' }}>
+					<Spinner /> Loading children...
+				</Flex>
+			</Disabled>
+		);
+	}
+
+	return control;
 
 }
 
@@ -275,6 +304,7 @@ export function PageSelector(props) {
 					...options
 				]);
 				if (props.parentPostId) {
+					setPrevSelected(selected);
 					setSelected(props.parentPostId);
 				}
 			});
@@ -297,6 +327,7 @@ export function PageSelector(props) {
 	 * @param {Object} selectedPostId The selected Author.
 	 */
 	const handleChange = (selectedPostId) => {
+		setPrevSelected(selected);
 		setSelected(selectedPostId);
 		setFieldValue(false);
 		if (props.onChange) {
@@ -326,10 +357,12 @@ export function PageSelector(props) {
 	if (isLoading) {
 		return (
 			<Disabled>
-				<Flex align="top">
+				<div style={{ position: 'relative' }}>
 					{control}
-					<Spinner />
-				</Flex>
+					<div style={{ position: 'absolute', top: '-5px', right: '0' }}>
+						<Spinner />
+					</div>
+				</div>
 			</Disabled>
 		);
 	}

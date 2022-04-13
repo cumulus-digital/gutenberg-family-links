@@ -222,6 +222,8 @@ registerBlockType( metadata.name, {
 									setDefault(['excludeAdditionalIDs', 'excludeNoindex']);
 								}}
 							>
+								<h3>Exclusions</h3>
+								
 								<ChildPagesSelector
 									label="Exclude Specific Child Pages"
 									help={
