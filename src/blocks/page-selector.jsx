@@ -91,7 +91,7 @@ export const getItemPriority = (name, searchValue) => {
 
 function buildPageList(props, searchValue = false, beginTreeFrom = null) {
 
-	const currentPostType = wp.data.select('core/editor').getCurrentPostType();
+	const currentPostType = props.postType ? props.postType : wp.data.select('core/editor').getCurrentPostType();
 	const pageId = props?.parentPostId ? props.parentPostId : wp.data.select('core/editor').getCurrentPostId();
 	let parentPost = pageId;
 	let postType = null;
@@ -293,7 +293,7 @@ export function PageSelector(props) {
 		}
 		if (! isEqual(prevProps, props)) {
 			setIsLoading(true);
-			const fetchOptions = new buildPageList({ parentPostId: selected }, fieldValue);
+			const fetchOptions = new buildPageList({ postType: props.postType, parentPostId: selected }, fieldValue);
 			fetchOptions.then(options => {
 				setIsLoading(false);
 				setOptions([

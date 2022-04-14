@@ -8,7 +8,7 @@ namespace CUMULUS\Gutenberg\FamilyLinks;
  * GitHub Plugin URI: https://github.com/cumulus-digital/gutenberg-family-links/
  * Primary Branch: main
  * Description: Block for inserting a page's children and/or siblings as links
- * Version: 0.0.10
+ * Version: 0.0.11
  * Author: vena
  * License: UNLICENSED
  */
@@ -46,7 +46,7 @@ function GUID() {
 
 // Editor Assets
 function editor_assets() {
-	if ( ! \is_post_type_hierarchical( \get_post_type() ) ) {
+	if ( ! \is_post_type_hierarchical( \get_post_type() ) && \get_post_type() !== 'wp_block' ) {
 		return;
 	}
 

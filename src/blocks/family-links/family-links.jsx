@@ -23,7 +23,7 @@ const {
 	ToggleControl,
 	SelectControl,
 	RangeControl,
-	__experimentalUnitControl: UnitControl,
+	//__experimentalUnitControl: UnitControl,
 	__experimentalBoxControl: BoxControl,
 	__experimentalToolsPanel: ToolsPanel,
 	__experimentalToolsPanelItem: ToolsPanelItem,
@@ -52,7 +52,7 @@ const {
 	FontSizePicker,
 } = wp.blockEditor;
 const { useEffect, useState } = wp.element;
-//const { useSelect } = wp.data;
+const { useSelect } = wp.data;
 
 registerBlockType( metadata.name, {
 	...metadata,
@@ -62,7 +62,9 @@ registerBlockType( metadata.name, {
 		const blockProps = useBlockProps();
 		var currentPost = wp.data.select('core/editor').getCurrentPost();
 		var currentPostParentId = wp.data.select('core/editor').getEditedPostAttribute('parent');
+		var currentPostType = wp.data.select('core/editor').getCurrentPostType();
 		const [isLoadingPages, setIsLoadingPages] = useState(false);
+		const [hierarchicalPostTypes, setHierarchicalPostTypes] = useState([{ value: null, label: 'None' }]);
 
 		function getDefault(key) {
 			if (metadata.attributes.hasOwnProperty(key) && metadata.attributes[key].hasOwnProperty('default')) {
@@ -100,6 +102,13 @@ registerBlockType( metadata.name, {
 					//setAttributes({ 'parentPostId': null });
 				}
 			}
+			if (!attributes.postType) {
+				if (currentPostType && currentPostType !== 'wp_block') {
+					setAttributes({ postType: currentPostType })
+				} else if (currentPostType === 'wp_block' && hierarchicalPostTypes.length) {
+					setAttributes({ postType: hierarchicalPostTypes[0].value });
+				}
+			}
 		}
 		useEffect(initParentPostId);
 
@@ -109,6 +118,23 @@ registerBlockType( metadata.name, {
 				setAttributes({ currentFontWeight: '700' });
 			}
 		});
+
+		const { availablePostTypes } = useSelect(select => (
+			{
+				availablePostTypes: select('core').getPostTypes()
+			}
+		));
+		useEffect(() => {
+			if (availablePostTypes && availablePostTypes.length) {
+				const hierarchical = availablePostTypes.filter(pt => pt.hierarchical);
+				if (hierarchical && hierarchical.length) {
+					setHierarchicalPostTypes(hierarchical.map(pt => ({
+						value: pt.slug,
+						label: pt.name
+					})));
+				}
+			}
+		}, [availablePostTypes]);
 
 		const updateTypography = (key, val) => {
 			let newTypo = {};
@@ -151,9 +177,22 @@ registerBlockType( metadata.name, {
 							label="Parent Context"
 							isShownByDefault={true}
 						>
+
+							{ ( currentPostType === 'wp_block' || hierarchicalPostTypes.length > 1) && (
+								<div style={{ marginBottom: '10px' }}>
+									<SelectControl
+										label="Post Type"
+										value={attributes.postType}
+										onChange={val => setAttributes({ postType: val })}
+										options={hierarchicalPostTypes}
+									/>
+								</div>
+							)}
+
 							<PageSelector
 								label="Parent Context"
 								help="Select the page to draw children from."
+								postType={attributes.postType}
 								parentPostId={attributes.parentPostId}
 								onChange={(val) => {
 									if (!val && val !== 0) {
@@ -223,7 +262,7 @@ registerBlockType( metadata.name, {
 								}}
 							>
 								<h3>Exclusions</h3>
-								
+
 								<ChildPagesSelector
 									label="Exclude Specific Child Pages"
 									help={
@@ -231,6 +270,7 @@ registerBlockType( metadata.name, {
 												${(navigator?.userAgentData?.platform || navigator?.platform || 'unknown').toUpperCase().indexOf('MAC') == 0 ? 'Command (⌘)' : 'Control'}
 												while clicking.`
 									}
+									postType={attributes.postType}
 									parentPostId={attributes.parentPostId}
 									value={attributes.excludeAdditionalIDs}
 									onChange={(val) => setAttributes({ excludeAdditionalIDs: val })}

@@ -13,6 +13,9 @@
 		"align": {
 			"type": "string"
 		},
+		"postType": {
+			"type": "string"
+		},
 		"parentPostId": {
 			"type": "integer"
 		},
